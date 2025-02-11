@@ -12,3 +12,4 @@ LOOP
     mov R2, R1, 0
     mov R6, R2, 0
     beq R0, R0, LOOP
+    call FUNCT1

@@ -160,7 +160,7 @@ impl IsaParser {
                 self.handle_label(first);
             }
             LineType::Macro => {
-                todo!()
+                self.handle_macro(first, rest);
             }
         }
     }
@@ -173,6 +173,10 @@ impl IsaParser {
 
     fn handle_label(&mut self, label: &str) {
         self.instr_writer.handle_label(label);
+    }
+
+    fn handle_macro(&self, macro_name: &str, args: Vec<&str>) {
+        self.instr_writer.handle_macro(macro_name, args);
     }
 
     fn print_opcodes(&self) {
@@ -315,6 +319,10 @@ impl InstrWriter {
     fn handle_label(&mut self, label: &str) {
         self.label_map.insert(label.to_string(), self.linenumber);
         println!("Label: {} at line {}", label, self.linenumber);
+    }
+
+    fn handle_macro(&self, macro_name: &str, args: Vec<&str>) {
+        panic!("Macros are not supported yet");
     }
 
     fn append_line(&mut self, line: BinEntry) {
