@@ -25,6 +25,8 @@ fn main() {
     let _ = lines
         .iter()
         .map(|l| {
+            println!("");
+            println!("Handling line: {}", l);
             let instr = opcodes_handler.handle_line(l);
             instr
         })
@@ -47,7 +49,17 @@ struct InstrBlueprint {
     num_nops: u32,
 }
 
-#[derive(Debug, Clone)]
+impl InstrBlueprint {
+    fn get_format(&self) -> InstrFormat {
+        self.instr_format.clone()
+    }
+
+    fn get_cooldown(&self) -> u32 {
+        self.num_nops.clone()
+    }
+}
+
+#[derive(Debug, Clone, PartialEq)]
 enum InstrFormat {
     R,
     I,
@@ -145,7 +157,7 @@ impl IsaParser {
                 self.handle_instr(opc, args);
             }
             LineType::Label => {
-                todo!()
+                self.handle_label(first);
             }
             LineType::Macro => {
                 todo!()
@@ -159,6 +171,10 @@ impl IsaParser {
         self.instr_writer.handle_instr(instr_blueprint, args);
     }
 
+    fn handle_label(&mut self, label: &str) {
+        self.instr_writer.handle_label(label);
+    }
+
     fn print_opcodes(&self) {
         println!("Opcodes:");
         println!("{:#?}", self.available_instr);
@@ -170,6 +186,7 @@ struct InstrWriter {
     output_file: PathBuf,
     linenumber: u32,
     reg_cooldown: HashMap<String, u32>,
+    label_map: HashMap<String, u32>,
 }
 
 impl InstrWriter {
@@ -183,18 +200,39 @@ impl InstrWriter {
             output_file,
             linenumber: 0,
             reg_cooldown,
+            label_map: HashMap::new(),
         }
     }
     fn handle_instr(&mut self, instr: InstrBlueprint, args: Vec<&str>) {
         match instr.instr_format {
-            InstrFormat::R => self.handle_r(instr, args),
-            InstrFormat::I => self.handle_i(instr, args),
-            InstrFormat::J => self.handle_j(instr, args),
+            InstrFormat::R => self.handle_r(&instr, &args),
+            InstrFormat::I => self.handle_i(&instr, &args),
+            InstrFormat::J => self.handle_j(&instr, &args),
             InstrFormat::N => self.handle_n(),
+        }
+        // set the cooldown for the second reg on I instructions and for the third reg on R instructions
+        let instr_format = instr.get_format();
+        if instr_format != InstrFormat::J && instr_format != InstrFormat::N {
+            let reg_to_cooldown = match instr_format {
+                InstrFormat::I => 1,
+                InstrFormat::R => 2,
+                _ => panic!("Doesn't happen"),
+            };
+
+            let reg = args[reg_to_cooldown];
+            let reg_num = reg
+                .chars()
+                .skip(1)
+                .collect::<String>()
+                .parse::<u32>()
+                .unwrap();
+
+            let cooldown = instr.get_cooldown();
+            self.reg_cooldown.insert(reg_num.to_string(), cooldown);
         }
     }
 
-    fn handle_r(&mut self, instr: InstrBlueprint, args: Vec<&str>) {
+    fn handle_r(&mut self, instr: &InstrBlueprint, args: &Vec<&str>) {
         let mut bin_rep = instr.bin_rep.clone();
         for arg in args {
             let reg = arg;
@@ -206,6 +244,7 @@ impl InstrWriter {
                 .unwrap();
             let reg_cooldown = *self.reg_cooldown.get(&reg_num.to_string()).unwrap();
             if reg_cooldown > 0 {
+                println!("Cooldown: {} for reg {}", reg_cooldown, reg_num);
                 //insert nops
                 for _ in 0..reg_cooldown {
                     self.handle_n();
@@ -219,11 +258,20 @@ impl InstrWriter {
         self.append_line(BinEntry::WithoutLabel(bin_rep));
     }
 
-    fn handle_i(&mut self, instr: InstrBlueprint, args: Vec<&str>) {
+    fn handle_i(&mut self, instr: &InstrBlueprint, args: &Vec<&str>) {
         let mut bin_rep = instr.bin_rep.clone();
         // parse the two registers and the immediate
         let (regs, imm) = args.split_at(2);
-        let imm = imm[0].parse::<i32>().unwrap();
+
+        let imm_num: i32;
+        // check if the immediate is a label
+        if imm[0].chars().next().unwrap().is_uppercase() {
+            // convert the label to a number by looking it up in the label map and subtracting the current line number
+            imm_num = *self.label_map.get(imm[0]).unwrap() as i32 - self.linenumber as i32;
+        } else {
+            imm_num = imm[0].parse::<i32>().unwrap();
+        }
+
         for reg in regs {
             let reg_num = reg
                 .chars()
@@ -234,6 +282,7 @@ impl InstrWriter {
 
             let reg_cooldown = *self.reg_cooldown.get(&reg_num.to_string()).unwrap();
             if reg_cooldown > 0 {
+                println!("Cooldown: {} for reg {}", reg_cooldown, reg_num);
                 //insert nops
                 for _ in 0..reg_cooldown {
                     self.handle_n();
@@ -242,7 +291,7 @@ impl InstrWriter {
 
             bin_rep.push_str(&format!("{:05b}", reg_num));
         }
-        let mut imm_bin_rep = format!("{:016b}", imm);
+        let mut imm_bin_rep = format!("{:016b}", imm_num);
         let imm_len = imm_bin_rep.len();
         imm_bin_rep = imm_bin_rep.chars().skip(imm_len - 16).collect::<String>();
         bin_rep.push_str(&imm_bin_rep);
@@ -250,7 +299,7 @@ impl InstrWriter {
         self.append_line(BinEntry::WithoutLabel(bin_rep));
     }
 
-    fn handle_j(&mut self, instr: InstrBlueprint, args: Vec<&str>) {
+    fn handle_j(&mut self, instr: &InstrBlueprint, args: &Vec<&str>) {
         let mut bin_rep = instr.bin_rep.clone();
         let imm = args[0].parse::<u32>().unwrap();
         bin_rep.push_str(&format!("{:026b}", imm));
@@ -263,12 +312,24 @@ impl InstrWriter {
         self.append_line(BinEntry::WithoutLabel(line));
     }
 
+    fn handle_label(&mut self, label: &str) {
+        self.label_map.insert(label.to_string(), self.linenumber);
+        println!("Label: {} at line {}", label, self.linenumber);
+    }
+
     fn append_line(&mut self, line: BinEntry) {
         // prepend the linenumber in dec with a space
         let line_string = line.get_string();
         let line_string = format!("{} {}", self.linenumber, line_string);
         self.bin_lines.push(line.update_str(line_string));
         self.linenumber += 1;
+
+        // decrement the reg cooldowns
+        for (reg, cooldown) in self.reg_cooldown.iter_mut() {
+            if *cooldown > 0 {
+                *cooldown -= 1;
+            }
+        }
     }
 
     fn write_lines(&self) {
