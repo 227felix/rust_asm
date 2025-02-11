@@ -1,0 +1,10 @@
+opc,binrep,instrf,nopn
+nop,000000,N,0
+add,000001,R,4
+sub,000010,R,4
+stw,001100,I,4
+ldi,001101,I,4
+mov,001110,I,4
+jmp,001010,J,4
+beq,000111,I,4
+bneq,001000,I,4
