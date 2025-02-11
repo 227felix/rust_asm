@@ -11,7 +11,7 @@ fn main() {
     // parse a .asm file from the command line with clap
     let args = Args::parse();
     let asm_file = if args.asm_file.is_empty() {
-        "alt\\fib.asm".to_string()
+        "alt/fib.asm".to_string()
     } else {
         args.asm_file
     };
@@ -21,9 +21,6 @@ fn main() {
 
     let asm = std::fs::read_to_string(asm_file).unwrap();
     let lines = asm.lines().map(|l| l.trim()).collect::<Vec<_>>();
-
-    let labels: Vec<(&str, u32)> = Vec::new();
-    let linenumber: u32 = 0;
 
     let _ = lines
         .iter()
@@ -83,7 +80,7 @@ struct IsaParser {
 }
 impl IsaParser {
     fn new() -> Self {
-        let instrs = IsaParser::parse_opccsv("C:\\Git Repositories\\rust_asm\\opcs.csv").unwrap();
+        let instrs = IsaParser::parse_opccsv("opcs.csv").unwrap();
         let instr_writer = InstrWriter::new(PathBuf::from("output.dat"));
         IsaParser {
             available_instr: instrs,
@@ -169,7 +166,7 @@ impl IsaParser {
 }
 
 struct InstrWriter {
-    bin_lines: Vec<String>,
+    bin_lines: Vec<BinEntry>,
     output_file: PathBuf,
     linenumber: u32,
     reg_cooldown: HashMap<String, u32>,
@@ -219,7 +216,7 @@ impl InstrWriter {
         }
         // add 11 0s to the end of the bin rep FIXME:
         bin_rep.push_str("00000000000");
-        self.append_line(bin_rep);
+        self.append_line(BinEntry::WithoutLabel(bin_rep));
     }
 
     fn handle_i(&mut self, instr: InstrBlueprint, args: Vec<&str>) {
@@ -249,26 +246,28 @@ impl InstrWriter {
         let imm_len = imm_bin_rep.len();
         imm_bin_rep = imm_bin_rep.chars().skip(imm_len - 16).collect::<String>();
         bin_rep.push_str(&imm_bin_rep);
-        self.append_line(bin_rep);
+        // FIXME: könnte auch mit Label sein
+        self.append_line(BinEntry::WithoutLabel(bin_rep));
     }
 
     fn handle_j(&mut self, instr: InstrBlueprint, args: Vec<&str>) {
         let mut bin_rep = instr.bin_rep.clone();
         let imm = args[0].parse::<u32>().unwrap();
         bin_rep.push_str(&format!("{:026b}", imm));
-        self.append_line(bin_rep);
+        self.append_line(BinEntry::WithLabel(bin_rep, args[0].to_string()));
     }
 
     fn handle_n(&mut self) {
         // append a line of 32 0s
         let line = format!("{:032b}", 0);
-        self.append_line(line);
+        self.append_line(BinEntry::WithoutLabel(line));
     }
 
-    fn append_line(&mut self, line: String) {
+    fn append_line(&mut self, line: BinEntry) {
         // prepend the linenumber in dec with a space
-        let line = format!("{} {}", self.linenumber, line);
-        self.bin_lines.push(line);
+        let line_string = line.get_string();
+        let line_string = format!("{} {}", self.linenumber, line_string);
+        self.bin_lines.push(line.update_str(line_string));
         self.linenumber += 1;
     }
 
@@ -276,8 +275,29 @@ impl InstrWriter {
         let mut file = File::create(&self.output_file).unwrap();
         for line in self.bin_lines.iter() {
             // write all the lines to the file with a newline character
-            file.write_all(line.as_bytes()).unwrap();
+            file.write_all(line.get_string().as_bytes()).unwrap();
             file.write_all(b"\n").unwrap();
+        }
+    }
+}
+
+#[derive(Debug, Clone)]
+enum BinEntry {
+    WithLabel(String, String),
+    WithoutLabel(String),
+}
+
+impl BinEntry {
+    fn update_str(&self, new_str: String) -> Self {
+        match self {
+            BinEntry::WithLabel(_, label) => BinEntry::WithLabel(new_str, label.clone()),
+            BinEntry::WithoutLabel(_) => BinEntry::WithoutLabel(new_str),
+        }
+    }
+    fn get_string(&self) -> String {
+        match self {
+            BinEntry::WithLabel(bin, _label) => bin.clone(),
+            BinEntry::WithoutLabel(bin) => bin.clone(),
         }
     }
 }
