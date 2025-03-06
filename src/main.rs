@@ -366,6 +366,9 @@ impl InstrWriter {
         // check whether the argument is a label or a Reg
         if args[0].chars().next().unwrap().is_uppercase() {
             self.append_line(BinEntry::WithAbsLabel(bin_rep, args[0].to_string()));
+            for _ in 0..4 {
+                self.handle_n();
+            }
             return;
         }
         let reg = args[0];
@@ -387,6 +390,11 @@ impl InstrWriter {
         bin_rep.push_str("000000000000000000000");
         let comment = format!(" -- {} {:?}", instr.opcode, args);
         self.append_line(BinEntry::WithoutLabel(bin_rep + &comment));
+
+        // append 4 nops maybe FIXME
+        for _ in 0..4 {
+            self.handle_n();
+        }
     }
 
     fn handle_n(&mut self) {

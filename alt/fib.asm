@@ -3,16 +3,19 @@
     
 # load a 1 in R30 to subtract the stackp 
     ldi R0, R30, 1
+#
 
-    ldi R0, R0, 2
-    call ADD
-    ldi R0, R1, 10
-    call ADD
-    jmp END
+    ldi R0, R0, 0
+    ldi R0, R1, 1
+LOOP
+    call FIB
+    jmp LOOP
 
 
 
-ADD
-    add R0, R0, R0
+FIB
+    add R0, R1, R2
+    mov R1, R0, 0
+    mov R2, R1, 0
     ret
 END
