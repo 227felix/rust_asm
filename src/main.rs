@@ -9,16 +9,17 @@ use std::path::{Path, PathBuf};
 fn main() {
     install();
 
-    // parse a .asm file from the command line with clap
+    // parse a .asm file and optional output path from the command line with clap
     let args = Args::parse();
-    let asm_file = if args.asm_file.is_empty() {
-        "alt/fib.asm".to_string()
-    } else {
-        args.asm_file
-    };
+    let asm_file = args.asm_file;
+    // let asm_file = if args.asm_file.is_empty() {
+    //     "alt/fib.asm".to_string()
+    // } else {
+    //     args.asm_file
+    // };
     println!("Parsing file: {}", asm_file);
 
-    let mut opcodes_handler = IsaParser::new();
+    let mut opcodes_handler = IsaParser::new(args.output_path);
 
     let asm = std::fs::read_to_string(asm_file).unwrap();
     let lines = asm.lines().map(|l| l.trim()).collect::<Vec<_>>();
@@ -81,33 +82,35 @@ impl InstrFormat {
 #[derive(Parser)]
 struct Args {
     /// The path to the .asm file to parse
-    #[clap(default_value = "")]
+    // #[clap(default_value = "")]
     asm_file: String,
+
+    /// The optional path to the output file
+    #[clap(short, long, default_value = "output.dat")]
+    output_path: String,
 }
 
 struct IsaParser {
     available_instr: HashMap<String, InstrBlueprint>,
     instr_writer: InstrWriter,
 }
+
 impl IsaParser {
-    fn new() -> Self {
-        let instrs = IsaParser::parse_opccsv("opcs.csv").unwrap();
-        let instr_writer = InstrWriter::new(PathBuf::from(
-            "C:\\Git Repositories\\projekt-mikrorechner-2024\\mikrorechner_rij-main\\output.dat",
-        ));
+    fn new(output_path: String) -> Self {
+        let instrs = IsaParser::parse_opccsv().unwrap();
+        let instr_writer = InstrWriter::new(PathBuf::from(output_path));
 
         IsaParser {
             available_instr: instrs,
             instr_writer,
         }
     }
-    fn parse_opccsv(filename: &str) -> io::Result<HashMap<String, InstrBlueprint>> {
-        let mut opcodes = HashMap::new();
-        let file = File::open(filename)?;
-        let reader = io::BufReader::new(file);
 
-        for line in reader.lines().skip(1) {
-            let line = line?;
+    fn parse_opccsv() -> io::Result<HashMap<String, InstrBlueprint>> {
+        let mut opcodes = HashMap::new();
+        let csv_content = include_str!("opcs.csv"); // Embed the file into the binary
+
+        for line in csv_content.lines().skip(1) {
             let parts: Vec<&str> = line.split(',').collect();
             let opc = parts[0].to_string();
             let bin_rep = parts[1].to_string();
@@ -425,7 +428,6 @@ impl InstrWriter {
 
     fn write_lines(&self) {
         let mut file = File::create(&self.output_file).unwrap();
-        let mut file1 = File::create(Path::new("output.dat")).unwrap(); // FIXME: Remove
         for (line_number, line) in self.bin_lines.iter().enumerate() {
             // write all the lines to the file with a newline character
             let mut bin_rep = line.get_string();
@@ -461,9 +463,6 @@ impl InstrWriter {
             }
             file.write_all(bin_rep.as_bytes()).unwrap();
             file.write_all(b"\n").unwrap();
-
-            file1.write_all(bin_rep.as_bytes()).unwrap(); // FIXME: Remove
-            file1.write_all(b"\n").unwrap(); // FIXME: Remove
         }
     }
 }
