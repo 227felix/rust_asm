@@ -17,5 +17,6 @@ FIB
     add R0, R1, R2
     mov R1, R0, 0
     mov R2, R1, 0
+    call FIB
     ret
 END
