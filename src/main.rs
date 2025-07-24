@@ -17,7 +17,7 @@ fn main() {
     // } else {
     //     args.asm_file
     // };
-    println!("Parsing file: {}", asm_file);
+    //println!("Parsing file: {}", asm_file);
 
     let mut opcodes_handler = IsaParser::new(args.output_path);
 
@@ -177,7 +177,7 @@ impl IsaParser {
 
     fn handle_instr(&mut self, opcode: &str, args: Vec<&str>) {
         let instr_blueprint = (*self.get_opcode(opcode).unwrap()).clone();
-        println!("Handling instr: {} with args: {:?}", opcode, args);
+        // println!("Handling instr: {} with args: {:?}", opcode, args);
 
         self.instr_writer.handle_instr(instr_blueprint, args);
     }
@@ -464,6 +464,11 @@ impl InstrWriter {
             file.write_all(bin_rep.as_bytes()).unwrap();
             file.write_all(b"\n").unwrap();
         }
+        println!(
+            "Wrote {} lines to {}",
+            self.bin_lines.len(),
+            self.output_file.display()
+        );
     }
 }
 
